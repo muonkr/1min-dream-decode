@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+* { -webkit-tap-highlight-color: transparent; }
+
+body {
+  touch-action: manipulation;
+  overscroll-behavior: none;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+
+button {
+  cursor: pointer;
+  touch-action: manipulation;
+  outline: none;
+}
+button:focus, button:focus-visible { outline: none; box-shadow: none; }
