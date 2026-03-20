@@ -1,5 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { Share2, ArrowRight, RefreshCw, ChevronLeft } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { RefreshCw } from 'lucide-react';
+import { loadFullScreenAd, showFullScreenAd } from '@apps-in-toss/web-framework';
+
+// ===== 광고 =====
+const REWARDED_AD_ID = 'ait-ad-test-rewarded-id';
+let adLoaded = false;
+
+function preloadRewardedAd() {
+  if (!loadFullScreenAd.isSupported()) return;
+  loadFullScreenAd({
+    options: { adGroupId: REWARDED_AD_ID },
+    onEvent: (e) => { if (e.type === 'loaded') adLoaded = true; },
+    onError: () => { adLoaded = false; }
+  });
+}
 
 // ===== 사운드 =====
 let audioCtx = null;
@@ -70,16 +84,26 @@ export default function App() {
   const [customMode, setCustomMode] = useState({ isActive: false, category: null });
   const [customValue, setCustomValue] = useState("");
   const [showExit, setShowExit] = useState(false);
+  const [resultUnlocked, setResultUnlocked] = useState(false);
+  const stepRef = useRef(0);
 
   // 유저 ID 초기화
   useEffect(() => { getUserId(); }, []);
 
-  // 뒤로가기 제스처 차단 + 종료 확인
+  // stepRef 동기화
+  useEffect(() => { stepRef.current = step; }, [step]);
+
+  // 뒤로가기 제스처 차단 + 단계 역행
   useEffect(() => {
     history.pushState(null, null, location.href);
     const onPopState = () => {
       history.pushState(null, null, location.href);
-      setShowExit(true);
+      const cur = stepRef.current;
+      if (cur >= 2 && cur <= 3) {
+        setStep(cur - 1);
+      } else {
+        setShowExit(true);
+      }
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
@@ -100,8 +124,31 @@ export default function App() {
       setStep(prev => prev + 1);
     } else {
       setStep(4);
+      preloadRewardedAd();
       setTimeout(() => setStep(5), 1500);
     }
+  };
+
+  const watchAdForResult = () => {
+    if (!showFullScreenAd.isSupported() || !adLoaded) {
+      setResultUnlocked(true);
+      return;
+    }
+    if (audioCtx) audioCtx.suspend();
+    showFullScreenAd({
+      options: { adGroupId: REWARDED_AD_ID },
+      onEvent: (e) => {
+        if (e.type === 'userEarnedReward' || e.type === 'dismissed') {
+          if (audioCtx) audioCtx.resume();
+          setResultUnlocked(true);
+          adLoaded = false;
+        }
+      },
+      onError: () => {
+        if (audioCtx) audioCtx.resume();
+        setResultUnlocked(true);
+      }
+    });
   };
 
   const handleCustomSubmit = () => {
@@ -140,22 +187,16 @@ export default function App() {
     setSelection({ subject: null, action: null, emotion: null });
     setCustomValue("");
     setCustomMode({ isActive: false, category: null });
+    setResultUnlocked(false);
     setStep(1);
   };
 
   const StepHeader = ({ title, currentStep }) => (
     <div className="mb-8">
-      <div className="flex items-center mb-6">
-        {currentStep > 1 && (
-          <button onClick={() => setStep(step - 1)} className="mr-3 text-gray-500 hover:text-gray-800">
-            <ChevronLeft size={24} />
-          </button>
-        )}
-        <div className="flex space-x-1 flex-1">
-          {[1, 2, 3].map(i => (
-            <div key={i} className={`h-1 flex-1 rounded-full ${i <= currentStep ? 'bg-blue-600' : 'bg-gray-200'}`} />
-          ))}
-        </div>
+      <div className="flex space-x-1 mb-6">
+        {[1, 2, 3].map(i => (
+          <div key={i} className={`h-1 flex-1 rounded-full ${i <= currentStep ? 'bg-blue-600' : 'bg-gray-200'}`} />
+        ))}
       </div>
       <h2 className="text-2xl font-bold text-gray-900 break-keep">{title}</h2>
     </div>
@@ -307,7 +348,28 @@ export default function App() {
     );
   }
 
-  if (step === 5) {
+  if (step === 5 && !resultUnlocked) {
+    return (
+      <>
+        <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 max-w-md mx-auto">
+          <div className="text-center">
+            <div className="text-6xl mb-6">🔮</div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">무의식 분석 완료</h2>
+            <p className="text-gray-500 mb-10">짧은 광고를 시청하면<br/>꿈해몽 결과를 확인할 수 있어요.</p>
+            <button
+              onClick={() => { playTone(523, 0.1); vibrate(20); watchAdForResult(); }}
+              className="w-full bg-blue-600 text-white text-lg font-semibold py-4 rounded-2xl active:scale-95 transition-transform"
+            >
+              광고 보고 결과 열기
+            </button>
+          </div>
+        </div>
+        {exitModal}
+      </>
+    );
+  }
+
+  if (step === 5 && resultUnlocked) {
     const { emotion, subject, action } = selection;
 
     return (<>
@@ -364,20 +426,12 @@ export default function App() {
                 </span>
               ))}
             </div>
-            <button className="w-12 h-12 flex items-center justify-center bg-white text-gray-900 rounded-full hover:bg-gray-100 transition-colors shadow-lg active:scale-95 shrink-0 ml-4">
-              <Share2 size={20} />
-            </button>
           </div>
 
           <div className="absolute -top-20 -right-20 w-64 h-64 bg-white/10 blur-3xl rounded-full"></div>
         </div>
 
-        <div className="w-full mt-6 px-4 space-y-3 pb-8">
-          <button className="w-full flex items-center justify-center space-x-2 bg-blue-600 text-white text-[15px] font-semibold py-4 rounded-xl hover:bg-blue-700 transition-colors active:scale-95">
-            <span>나의 꿈, 심층 심리 분석하기</span>
-            <ArrowRight size={18} />
-          </button>
-
+        <div className="w-full mt-6 px-4 pb-8">
           <button
             onClick={reset}
             className="w-full text-gray-400 text-sm py-3 hover:text-gray-600 transition-colors"

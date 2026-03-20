@@ -5,9 +5,12 @@ export default defineConfig({
   brand: {
     displayName: '1분꿈해몽',
     primaryColor: '#2563eb',
-    icon: 'icon.png',
+    icon: 'https://raw.githubusercontent.com/muonkr/1min-dream-decode/main/public/icon.png',
   },
   permissions: [],
+  navigationBar: {
+    withBackButton: true,
+  },
   web: {
     host: 'localhost',
     port: 5174,
